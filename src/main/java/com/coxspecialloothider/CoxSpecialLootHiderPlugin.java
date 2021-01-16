@@ -16,7 +16,7 @@ import java.util.ArrayList;
 
 @Slf4j
 @PluginDescriptor(
-	name = "CoX Special Loot Hider"
+	name = "CoX Censor"
 )
 public class CoxSpecialLootHiderPlugin extends Plugin
 {
@@ -30,6 +30,10 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 	private ChatMessageManager chatMessageManager;
 
 	private ArrayList<String> turnOffMessages = new ArrayList<String>();
+
+	private static final String[] listOfItems = {"Dexterous prayer scroll", "Arcane prayer scroll", "Twisted buckler",
+			"Dragon hunter crossbow", "Dinh's bulwark", "Ancestral hat", "Ancestral robe top", "Ancestral robe bottom",
+			"Dragon claws", "Elder maul", "Kodai insignia", "Twisted bow"};
 
 	@Override
 	protected void startUp() throws Exception
@@ -61,76 +65,28 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 				turnOffMessages.clear();
 			}
 
-			//If it has playerName - Item, we know to censor and store it
-			//If its a Friends Chat Notification and has the item name, the message is replaced with a censored one
-			//and the original message is stored so you can see it later
-			if(chatMessage.getMessage().contains("Dexterous prayer scroll") ||
-					chatMessage.getMessage().contains("Arcane prayer scroll") ||
-					chatMessage.getMessage().contains("Twisted buckler") ||
-					chatMessage.getMessage().contains("Dragon hunter crossbow") ||
-					chatMessage.getMessage().contains("Dinh's bulwark") ||
-					chatMessage.getMessage().contains("Ancestral hat") ||
-					chatMessage.getMessage().contains("Ancestral robe top") ||
-					chatMessage.getMessage().contains("Ancestral robe bottom") ||
-					chatMessage.getMessage().contains("Dragon claws") ||
-					chatMessage.getMessage().contains("Elder maul") ||
-					chatMessage.getMessage().contains("Kodai insignia") ||
-					chatMessage.getMessage().contains("Twisted bow")) {
+			//Iterating through the list of CoX uniques
+			for (String item : listOfItems){
 
-				//Setting an empty message string that will keep the player that got the drop while replacing
-				//the drop with question marks.
-				String msg = "";
+				//Check if item is in the message
+				if(chatMessage.getMessage().contains(item)){
 
-				//Stores the message so the player can turn off the plugin to see the item
-				turnOffMessages.add(chatMessage.getMessage());
+					//Adds it to the list of messages for the when plugin is turned off
+					turnOffMessages.add(chatMessage.getMessage());
+					
+					//Replaces item name with ???
+					String msg = chatMessage.getMessage().replace(item, "???");
 
-				//Finding the literal item to censor
-				//Replaces item name with ???
-				if(chatMessage.getMessage().contains("Dexterous prayer scroll")) {
-					msg = chatMessage.getMessage().replace("Dexterous prayer scroll", "???");
-				}
-				else if(chatMessage.getMessage().contains("Arcane prayer scroll")){
-					msg = chatMessage.getMessage().replace("Arcane prayer scroll", "???");
-				}
-				else if(chatMessage.getMessage().contains("Twisted buckler")){
-					msg = chatMessage.getMessage().replace("Twisted buckler", "???");
-				}
-				else if(chatMessage.getMessage().contains("Dragon hunter crossbow")){
-					msg = chatMessage.getMessage().replace("Dragon hunter crossbow", "???");
-				}
-				else if(chatMessage.getMessage().contains("Dinh's bulwark")){
-					msg = chatMessage.getMessage().replace("Dinh's bulwark", "???");
-				}
-				else if(chatMessage.getMessage().contains("Ancestral hat")){
-					msg = chatMessage.getMessage().replace("Ancestral hat", "???");
-				}
-				else if(chatMessage.getMessage().contains("Ancestral robe top")){
-					msg = chatMessage.getMessage().replace("Ancestral robe top", "???");
-				}
-				else if(chatMessage.getMessage().contains("Ancestral robe bottom")){
-					msg = chatMessage.getMessage().replace("Ancestral robe bottom", "???");
-				}
-				else if(chatMessage.getMessage().contains("Dragon claws")){
-					msg = chatMessage.getMessage().replace("Dragon claws", "???");
-				}
-				else if(chatMessage.getMessage().contains("Elder maul")){
-					msg = chatMessage.getMessage().replace("Elder maul", "???");
-				}
-				else if(chatMessage.getMessage().contains("Kodai insignia")){
-					msg = chatMessage.getMessage().replace("Kodai insignia", "???");
-				}
-				else if(chatMessage.getMessage().contains("Twisted bow")){
-					msg = chatMessage.getMessage().replace("Twisted bow", "???");
-				}
+					//Changing the message of the chatMessage. This only sets the message on the backend
+					chatMessage.setMessage(msg);
 
-				//Changing the message of the chatMessage. This only sets the message on the backend
-				chatMessage.setMessage(msg);
-
-				//Updating it on the UI end
-				final MessageNode messageNode = chatMessage.getMessageNode();
-				messageNode.setRuneLiteFormatMessage(msg);
-				chatMessageManager.update(messageNode);
-				client.refreshChat();
+					//Updating it on the UI end
+					final MessageNode messageNode = chatMessage.getMessageNode();
+					messageNode.setRuneLiteFormatMessage(msg);
+					chatMessageManager.update(messageNode);
+					client.refreshChat();
+					break;
+				}
 			}
 		}
 	}
