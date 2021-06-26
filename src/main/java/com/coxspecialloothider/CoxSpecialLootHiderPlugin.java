@@ -42,6 +42,7 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 	protected void startUp() throws Exception
 	{
 		turnOffMessages.clear();
+		turnOffStrings.clear();
 		client.refreshChat();
 	}
 
@@ -72,7 +73,8 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 		client.refreshChat();
 	}
 
-	//Shows loot upon looting the chest
+	//Shows purple upon looting the chest
+	//If no purple, it wont do anything. If there is, it will un-hide it
 	@Subscribe
 	public void onWidgetLoaded(WidgetLoaded wid){
 		if(wid.getGroupId() == WidgetID.CHAMBERS_OF_XERIC_REWARD_GROUP_ID){
