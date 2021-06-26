@@ -85,6 +85,14 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 	{
 		if (chatMessage.getType() == ChatMessageType.FRIENDSCHATNOTIFICATION)
 		{
+			//Shown when completing a raid.
+			//Will turn off before a purple is shown, so if someone leaves a raid and doesn't open chest
+			//but gets a purple later, this will clear it so there is no funny business.
+			if(chatMessage.getMessage().contains("Congratulations - your raid is complete!")){
+				turnOffMessages.clear();
+				turnOffStrings.clear();
+			}
+
 			//Iterating through the list of CoX uniques
 			for (String item : listOfItems){
 
