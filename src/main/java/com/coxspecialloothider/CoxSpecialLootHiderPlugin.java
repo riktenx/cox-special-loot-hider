@@ -13,6 +13,8 @@ import net.runelite.api.events.ChatMessage;
 import net.runelite.api.MessageNode;
 import net.runelite.client.chat.ChatMessageManager;
 import java.util.ArrayList;
+import net.runelite.api.events.WidgetLoaded;
+import net.runelite.api.widgets.WidgetID;
 
 @Slf4j
 @PluginDescriptor(
@@ -29,7 +31,8 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 	@Inject
 	private ChatMessageManager chatMessageManager;
 
-	private ArrayList<String> turnOffMessages = new ArrayList<String>();
+	private ArrayList<ChatMessage> turnOffMessages = new ArrayList<ChatMessage>();
+	private ArrayList<String> turnOffStrings= new ArrayList<String>();
 
 	private static final String[] listOfItems = {"Dexterous prayer scroll", "Arcane prayer scroll", "Twisted buckler",
 			"Dragon hunter crossbow", "Dinh's bulwark", "Ancestral hat", "Ancestral robe top", "Ancestral robe bottom",
@@ -45,13 +48,36 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 	@Override
 	protected void shutDown() throws Exception
 	{
+		showLoot();
+	}
+
+	//Shows loot
+	private void showLoot(){
 		//Shows the player the messages that were censored
 		//Multiple items are stored in the ArrayList and re-sent upon turning off the plugin
-		//On completion of another raid, the list is cleared
+		//On chest open the list is cleared
 		if(!turnOffMessages.isEmpty()){
-			turnOffMessages.forEach((n) -> client.addChatMessage(ChatMessageType.FRIENDSCHATNOTIFICATION, "", n, ""));
+			for(int i = 0; i < turnOffMessages.size(); i++){
+				//Gets the original message as string, sets the string at the
+				//referenced ChatMessage as that string
+				turnOffMessages.get(i).setMessage(turnOffStrings.get(i));
+				//Updates the front end of that node
+				final MessageNode messageNode = turnOffMessages.get(i).getMessageNode();
+				messageNode.setRuneLiteFormatMessage(turnOffStrings.get(i));
+				chatMessageManager.update(messageNode);
+			}
+			turnOffMessages.clear();
+			turnOffStrings.clear();
 		}
 		client.refreshChat();
+	}
+
+	//Shows loot upon looting the chest
+	@Subscribe
+	public void onWidgetLoaded(WidgetLoaded wid){
+		if(wid.getGroupId() == WidgetID.CHAMBERS_OF_XERIC_REWARD_GROUP_ID){
+			showLoot();
+		}
 	}
 
 	@Subscribe
@@ -59,12 +85,6 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 	{
 		if (chatMessage.getType() == ChatMessageType.FRIENDSCHATNOTIFICATION)
 		{
-			//Shown when completing a raid. When this happens, the previous loots are cleared from our storage of
-			//messages so that the player only sees items from the last raid when turning off the plugin
-			if(chatMessage.getMessage().contains("Congratulations - your raid is complete!")){
-				turnOffMessages.clear();
-			}
-
 			//Iterating through the list of CoX uniques
 			for (String item : listOfItems){
 
@@ -72,7 +92,8 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 				if(chatMessage.getMessage().contains(item)){
 
 					//Adds it to the list of messages for the when plugin is turned off
-					turnOffMessages.add(chatMessage.getMessage());
+					turnOffMessages.add(chatMessage);
+					turnOffStrings.add(chatMessage.getMessage());
 					
 					//Replaces item name with ???
 					String msg = chatMessage.getMessage().replace(item, "???");
