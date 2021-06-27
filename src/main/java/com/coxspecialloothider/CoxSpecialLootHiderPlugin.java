@@ -55,18 +55,19 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 	//Shows loot
 	private void showLoot(){
 		//Shows the player the messages that were censored
-		//Multiple items are stored in the ArrayList and re-sent upon turning off the plugin
-		//On chest open the list is cleared
+		//Multiple items are stored in the ArrayList and replaced upon turning off the plugin
+		//On chest open, plugin shutdown, or raid completion, the list is cleared
 		if(!turnOffMessages.isEmpty()){
 			for(int i = 0; i < turnOffMessages.size(); i++){
 				//Gets the original message as string, sets the string at the
-				//referenced ChatMessage as that string
+				//referenced ChatMessage
 				turnOffMessages.get(i).setMessage(turnOffStrings.get(i));
 				//Updates the front end of that node
 				final MessageNode messageNode = turnOffMessages.get(i).getMessageNode();
 				messageNode.setRuneLiteFormatMessage(turnOffStrings.get(i));
 				chatMessageManager.update(messageNode);
 			}
+			//Clear messages as long as list isnt empty already
 			turnOffMessages.clear();
 			turnOffStrings.clear();
 		}
