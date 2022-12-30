@@ -62,6 +62,7 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 	private void showLoot(){
 		for(Tuple<MessageNode, String> message : revealMessages){
 			//Gets the original message as string, sets the string at the referenced ChatMessage
+			System.out.print("REVEAL MESSAGE BEING REPLACED: " + message.toString());//TODO REMOVE
 			message.getFirst().setValue(message.getSecond());
 			message.getFirst().setRuneLiteFormatMessage(message.getSecond());
 		}
@@ -76,7 +77,7 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 		if(wid.getGroupId() == WidgetID.CHAMBERS_OF_XERIC_REWARD_GROUP_ID ||
 				wid.getGroupId() == WidgetID.CHAMBERS_OF_XERIC_STORAGE_UNIT_PRIVATE_GROUP_ID ||
 				wid.getGroupId() == WidgetID.BANK_GROUP_ID){
-			System.out.print("Hello, you are showing the loot");//TODO REMOVE
+			System.out.println("Hello, you are showing the loot");//TODO REMOVE
 			showLoot();
 		}
 	}
@@ -101,13 +102,6 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 
 		if (chatMessageType == ChatMessageType.FRIENDSCHATNOTIFICATION){
 
-			//Clear list of currently censored items in case the player did not reveal previously
-			if(message.contains("Congratulations - your raid is complete!")){
-				clearLists();
-				return;
-			}
-
-
 			//Iterating through the list of CoX uniques
 			for (String item : listOfItems){
 				System.out.println("Message: " + message + ", item: " + item + ". Does message contain item?: ");//TODO remove after testing
@@ -116,9 +110,10 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 				//Check if CoX unique is in the message
 				if(message.contains(item)){
 					System.out.println("CHAT CONTAINS AN ITEM. NEW LOOT RECEIVED: ");//TODO remove after testing
+
 					String censored = message.replace(item, "???");
-					System.out.println(censored);//TODO remove after testing
 					revealMessages.add(new Tuple(messageNode, message));
+					System.out.println(censored);//TODO remove after testing
 					System.out.println("Reveal message added: " + new Tuple(messageNode, message));//TODO remove after testing
 					messageNode.setValue(censored);
 					messageNode.setRuneLiteFormatMessage(censored);
@@ -167,14 +162,18 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 
 	@Subscribe
 	public void onChatMessage(ChatMessage chatMessage) {
-		System.out.println("New Message " + chatMessage + " and the sender: " + chatMessage.getSender());//TODO REMOVE AFTER TESTING
+		System.out.println("New Message " + chatMessage);//TODO REMOVE AFTER TESTING
 
-		/*Leave this for testing if modifications are needed.
+		//Leave this for testing if modifications are needed.
 		if (chatMessage.getType() == ChatMessageType.OBJECT_EXAMINE) {
-			client.addChatMessage(ChatMessageType.FRIENDSCHATNOTIFICATION,"", "Karambtwo - Twisted bow", "");
+			client.addChatMessage(ChatMessageType.FRIENDSCHATNOTIFICATION,"", "<col=ef20ff>Karambtwo - Twisted bow</col>", "");
+
 			//client.addChatMessage(ChatMessageType.FRIENDSCHATNOTIFICATION,"", "OtherAccount - Dragon claws", "");
 		}
 		if (chatMessage.getType() == ChatMessageType.ITEM_EXAMINE) {
+
+
+
 			client.addChatMessage(ChatMessageType.CLAN_MESSAGE,"", "Karambtwo received special loot from a raid: Twisted bow (1,680,988,483)", "Valiance");
 			client.addChatMessage(ChatMessageType.CLAN_MESSAGE,"", "Karambtwo received a new collection log item: Twisted bow (507/1,587)", "Valiance");
 			client.addChatMessage(ChatMessageType.GAMEMESSAGE,"", "New item added to your collection log: Twisted bow (507/1,587)", "");
@@ -190,13 +189,16 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 			//client.addChatMessage(ChatMessageType.CLAN_MESSAGE,"", "OtherAccount received a new collection log item: Twisted bow (507/1,587)", "Valiance");
 		}
 		if (chatMessage.getType() == ChatMessageType.FRIENDSCHAT) {
+			/*
 			client.addChatMessage(ChatMessageType.CLAN_MESSAGE,"", "Karambtwo received special loot from a raid: Tumeken's shadow (uncharged) (1,680,988,483)", "Valiance");
 			client.addChatMessage(ChatMessageType.CLAN_MESSAGE,"", "Karambtwo received a new collection log item: Tumeken's shadow (uncharged) (507/1,587)", "Valiance");
-			client.addChatMessage(ChatMessageType.GAMEMESSAGE,"", "New item added to your collection log: Tumeken's shadow (uncharged) (507/1,587)", "");
+			client.addChatMessage(ChatMessageType.GAMEMESSAGE,"", "New item added to your collection log: Tumeken's shadow (uncharged) (507/1,587)", "");*/
+
+			System.out.println(revealMessages);
 
 			//client.addChatMessage(ChatMessageType.CLAN_MESSAGE,"", "OtherAccount received special loot from a raid: Twisted bow (1,680,988,483)", "Valiance");
 			//client.addChatMessage(ChatMessageType.CLAN_MESSAGE,"", "OtherAccount received a new collection log item: Twisted bow (507/1,587)", "Valiance");
-		}*/
+		}
 
 
 		//Check FC broadcasts to see if a raid was completed
@@ -215,7 +217,7 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 				//Check if CoX unique is in the message. Flip flag and add to loot received
 				if(chatMessage.getMessage().contains(item)){
 					itemReceived = true;
-					String name = chatMessage.getMessage().substring(0, chatMessage.getMessage().indexOf("-") - 1);
+					String name = chatMessage.getMessage().substring(12, chatMessage.getMessage().indexOf("-") - 1);
 					listOfLoot.add(new Tuple(name, item));
 					System.out.println("Loot added: " + new Tuple(name, item).toString());//TODO remove after testing
 					//censorMessage() //TODO remove after testing
