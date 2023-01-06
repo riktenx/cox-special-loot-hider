@@ -4,20 +4,15 @@ import com.google.inject.Provides;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
-import net.runelite.api.clan.ClanChannel;
 import net.runelite.api.events.ScriptCallbackEvent;
-import net.runelite.client.chat.ChatMessageBuilder;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.api.events.ChatMessage;
-import net.runelite.client.chat.ChatMessageManager;
 import java.util.ArrayList;
 import net.runelite.api.events.WidgetLoaded;
 import net.runelite.api.widgets.WidgetID;
-
-import static net.runelite.api.ChatMessageType.FRIENDSCHAT;
 
 @Slf4j
 @PluginDescriptor(
@@ -62,7 +57,7 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 	private void showLoot(){
 		for(Tuple<MessageNode, String> message : revealMessages){
 			//Gets the original message as string, sets the string at the referenced ChatMessage
-			System.out.print("REVEAL MESSAGE BEING REPLACED: " + message.toString());//TODO REMOVE
+			//System.out.print("REVEAL MESSAGE BEING REPLACED: " + message.toString());
 			message.getFirst().setValue(message.getSecond());
 			message.getFirst().setRuneLiteFormatMessage(message.getSecond());
 		}
@@ -77,7 +72,7 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 		if(wid.getGroupId() == WidgetID.CHAMBERS_OF_XERIC_REWARD_GROUP_ID ||
 				wid.getGroupId() == WidgetID.CHAMBERS_OF_XERIC_STORAGE_UNIT_PRIVATE_GROUP_ID ||
 				wid.getGroupId() == WidgetID.BANK_GROUP_ID){
-			System.out.println("Hello, you are showing the loot");//TODO REMOVE
+			//System.out.println("Hello, you are showing the loot");
 			showLoot();
 		}
 	}
@@ -104,17 +99,16 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 
 			//Iterating through the list of CoX uniques
 			for (String item : listOfItems){
-				System.out.println("Message: " + message + ", item: " + item + ". Does message contain item?: ");//TODO remove after testing
-				System.out.println(message.contains(item));//TODO remove after testing
+				//System.out.println("Message: " + message + ", item: " + item + ". Does message contain item?: ");
+				//System.out.println(message.contains(item));
 
 				//Check if CoX unique is in the message
 				if(message.contains(item)){
-					System.out.println("CHAT CONTAINS AN ITEM. NEW LOOT RECEIVED: ");//TODO remove after testing
-
+					//System.out.println("CHAT CONTAINS AN ITEM. NEW LOOT RECEIVED: ");/
 					String censored = message.replace(item, "???");
 					revealMessages.add(new Tuple(messageNode, message));
-					System.out.println(censored);//TODO remove after testing
-					System.out.println("Reveal message added: " + new Tuple(messageNode, message));//TODO remove after testing
+					//System.out.println(censored);
+					//System.out.println("Reveal message added: " + new Tuple(messageNode, message));
 					messageNode.setValue(censored);
 					messageNode.setRuneLiteFormatMessage(censored);
 					break;
@@ -137,7 +131,7 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 			else if((chatMessageType == ChatMessageType.CLAN_MESSAGE ||
 					chatMessageType == ChatMessageType.CLAN_GIM_MESSAGE)){
 				//See it it contains both the player and item that received loot
-				System.out.println("CLAN BROADCAST TRIGGERED AFTER ITEM RECEIVED");//TODO remove after testing
+				//System.out.println("CLAN BROADCAST TRIGGERED AFTER ITEM RECEIVED");
 				for (Tuple<String, String> loot : listOfLoot) {
 					//First is name, Second is item
 					if (message.contains(loot.getSecond()) && message.contains(loot.getFirst())) {
@@ -149,7 +143,7 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 						else{
 							String value = message.substring(0, message.indexOf(":")) + ": ???";
 							revealMessages.add(new Tuple(messageNode, message));
-							System.out.println("SPECIAL LOOT FROM RAID MESSAGE AND REVEAL ADDED: " + message);//TODO remove after testing
+							//System.out.println("SPECIAL LOOT FROM RAID MESSAGE AND REVEAL ADDED: " + message);
 							messageNode.setValue(value);
 							messageNode.setRuneLiteFormatMessage(value);
 						}
@@ -162,8 +156,8 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 
 	@Subscribe
 	public void onChatMessage(ChatMessage chatMessage) {
-		System.out.println("New Message " + chatMessage);//TODO REMOVE AFTER TESTING
 
+		/*
 		//Leave this for testing if modifications are needed.
 		if (chatMessage.getType() == ChatMessageType.OBJECT_EXAMINE) {
 			client.addChatMessage(ChatMessageType.FRIENDSCHATNOTIFICATION,"", "<col=ef20ff>Karambtwo - Twisted bow</col>", "");
@@ -189,29 +183,20 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 			//client.addChatMessage(ChatMessageType.CLAN_MESSAGE,"", "OtherAccount received a new collection log item: Twisted bow (507/1,587)", "Valiance");
 		}
 		if (chatMessage.getType() == ChatMessageType.FRIENDSCHAT) {
-			/*
 			client.addChatMessage(ChatMessageType.CLAN_MESSAGE,"", "Karambtwo received special loot from a raid: Tumeken's shadow (uncharged) (1,680,988,483)", "Valiance");
 			client.addChatMessage(ChatMessageType.CLAN_MESSAGE,"", "Karambtwo received a new collection log item: Tumeken's shadow (uncharged) (507/1,587)", "Valiance");
-			client.addChatMessage(ChatMessageType.GAMEMESSAGE,"", "New item added to your collection log: Tumeken's shadow (uncharged) (507/1,587)", "");*/
+			client.addChatMessage(ChatMessageType.GAMEMESSAGE,"", "New item added to your collection log: Tumeken's shadow (uncharged) (507/1,587)", "");
 
 			System.out.println(revealMessages);
 
 			//client.addChatMessage(ChatMessageType.CLAN_MESSAGE,"", "OtherAccount received special loot from a raid: Twisted bow (1,680,988,483)", "Valiance");
 			//client.addChatMessage(ChatMessageType.CLAN_MESSAGE,"", "OtherAccount received a new collection log item: Twisted bow (507/1,587)", "Valiance");
-		}
+		}*/
 
 
 		//Check FC broadcasts to see if a raid was completed
 		//This sets the trigger for chat filtering and maintains list of loot
 		if (chatMessage.getType() == ChatMessageType.FRIENDSCHATNOTIFICATION){
-
-			//Clear list of currently censored items in case the player did not reveal previously
-			if(chatMessage.getMessage().contains("Congratulations - your raid is complete!")){
-				clearLists();
-				return;
-			}
-
-
 			//Iterating through the list of CoX uniques
 			for (String item : listOfItems){
 				//Check if CoX unique is in the message. Flip flag and add to loot received
@@ -219,54 +204,11 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 					itemReceived = true;
 					String name = chatMessage.getMessage().substring(12, chatMessage.getMessage().indexOf("-") - 1);
 					listOfLoot.add(new Tuple(name, item));
-					System.out.println("Loot added: " + new Tuple(name, item).toString());//TODO remove after testing
-					//censorMessage() //TODO remove after testing
 					break;
 				}
 			}
 		}
 	}
-
-	/* TODO Remove is testing goes well
-	private void censorMessage(ChatMessage chatMessage, String item){
-
-		//Adds it to the list of messages for the when plugin is turned off
-		//revealMessages.add(new Tuple<ChatMessage, String>(chatMessage, chatMessage.getMessage()));
-		System.out.println("Reveal message added: " + new Tuple<ChatMessage, String>(chatMessage, chatMessage.getMessage()));//TODO REMOVE
-		String msg;
-
-		//If Clan or GIM Clan broadcast, use substring to price does not show
-		if(chatMessage.getType() == ChatMessageType.CLAN_MESSAGE ||
-				chatMessage.getType() == ChatMessageType.CLAN_GIM_MESSAGE) {
-			//Remove completely if collection log. Dont spoil uniques
-
-			if(chatMessage.getMessage().contains("received a new collection log item:")){
-				msg = "";//null;//TODO MAKE THIS NOT TAKE UP A A LINE. MAYBE JUST DELETE NODE
-				//chatMessage.getMessageNode().unlink();
-				//chatLineBuffer.removeMessageNode()
-			}
-			else{//Normal raid clan broadcast
-				msg = chatMessage.getMessage().substring(0, chatMessage.getMessage().indexOf(":")) + ": ???";
-			}
-		}
-		else if(chatMessage.getType() == ChatMessageType.GAMEMESSAGE) {
-			msg = "";
-		}
-		else{
-			//Replaces item with ???
-			msg = chatMessage.getMessage().replace(item, "???");
-		}
-
-		System.out.print("HERE WAS THE CENSORED MSG: " + msg);//TODO REMOVE AFTER TESTING
-
-		//Changing the message of the chatMessage. This only sets the message on the backend
-		chatMessage.setMessage(msg);
-
-		//Updating it on the UI end
-		final MessageNode messageNode = chatMessage.getMessageNode();
-		messageNode.setRuneLiteFormatMessage(msg);
-		client.refreshChat();
-	}*/
 
 	@Provides
 	CoxSpecialLootHiderConfig provideConfig(ConfigManager configManager)
