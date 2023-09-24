@@ -72,6 +72,8 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 		client.refreshChat();
 	}
 
+
+
 	//Shows purple upon looting the chest, private storage, or bank
 	//If no purple, it wont do anything. If there is, it will un-hide it
 	@Subscribe
