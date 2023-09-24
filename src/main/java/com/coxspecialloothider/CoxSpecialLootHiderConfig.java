@@ -8,5 +8,14 @@ import net.runelite.client.config.ConfigSection;
 @ConfigGroup("example")
 public interface CoxSpecialLootHiderConfig extends Config
 {
-	//The only setting needed is the plugin being turned on
+    @ConfigItem(
+            keyName = "soloOnly",
+            name = "Only censor your purples?",
+            description = "Only censor if the purple is yours",
+            position = 1
+    )
+    default boolean soloOnly()
+    {
+        return false;
+    }
 }

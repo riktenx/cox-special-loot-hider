@@ -4,15 +4,16 @@ import com.google.inject.Provides;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
-import net.runelite.api.events.ScriptCallbackEvent;
+import net.runelite.api.events.*;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
-import net.runelite.api.events.ChatMessage;
+
 import java.util.ArrayList;
-import net.runelite.api.events.WidgetLoaded;
+
 import net.runelite.api.widgets.WidgetID;
+import net.runelite.client.ui.overlay.WidgetOverlay;
 
 @Slf4j
 @PluginDescriptor(
@@ -46,6 +47,12 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 		showLoot();
 	}
 
+	@Provides
+	CoxSpecialLootHiderConfig provideConfig(ConfigManager configManager)
+	{
+		return configManager.getConfig(CoxSpecialLootHiderConfig.class);
+	}
+
 	private void clearLists(){
 		revealMessages.clear();
 		listOfLoot.clear();
@@ -76,6 +83,7 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 			showLoot();
 		}
 	}
+
 
 	@Subscribe
 	public void onScriptCallbackEvent(ScriptCallbackEvent event) {
@@ -118,7 +126,8 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 		else if(itemReceived){
 			//If GAMEMESSAGE, check if it a collection log item and if it was received in the raid
 			if(chatMessageType == ChatMessageType.GAMEMESSAGE &&
-					message.contains("New item added to your collection log:")){
+					(message.contains("New item added to your collection log:") ||
+							message.contains("Valuable drop:"))){
 				for (Tuple<String, String> loot : listOfLoot) {
 					if(message.contains(loot.getSecond())) {
 						revealMessages.add(new Tuple(messageNode, message));
@@ -201,6 +210,9 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 			for (String item : listOfItems){
 				//Check if CoX unique is in the message. Flip flag and add to loot received
 				if(chatMessage.getMessage().contains(item)){
+					if(config.soloOnly() && !chatMessage.getMessage().contains(client.getLocalPlayer().getName())){
+						return;
+					}
 					itemReceived = true;
 					String name = chatMessage.getMessage().substring(12, chatMessage.getMessage().indexOf("-") - 1);
 					listOfLoot.add(new Tuple(name, item));
@@ -208,12 +220,6 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 				}
 			}
 		}
-	}
-
-	@Provides
-	CoxSpecialLootHiderConfig provideConfig(ConfigManager configManager)
-	{
-		return configManager.getConfig(CoxSpecialLootHiderConfig.class);
 	}
 }
 
