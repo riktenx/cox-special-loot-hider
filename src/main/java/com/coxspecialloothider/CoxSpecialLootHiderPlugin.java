@@ -9,11 +9,8 @@ import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
-
 import java.util.ArrayList;
-
 import net.runelite.api.widgets.WidgetID;
-import net.runelite.client.ui.overlay.WidgetOverlay;
 
 @Slf4j
 @PluginDescriptor(
@@ -73,6 +70,32 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 	}
 
 
+
+	@Subscribe
+	public void onScriptPreFired(ScriptPreFired scriptPreFired)
+	{
+		if(itemReceived && config.colLog()) {
+			switch (scriptPreFired.getScriptId()) {
+				case ScriptID.NOTIFICATION_START:
+					String notificationTopText = client.getVarcStrValue(VarClientStr.NOTIFICATION_TOP_TEXT);
+					String notificationBottomText = client.getVarcStrValue(VarClientStr.NOTIFICATION_BOTTOM_TEXT);
+					if (notificationTopText.equalsIgnoreCase("Collection log")) {
+
+						for (Tuple<String, String> loot : listOfLoot) {
+							if (notificationBottomText.contains(loot.getSecond())) {
+								for (WidgetNode node : client.getComponentTable()) {
+									if (node.getId() == 660) {
+										client.closeInterface(node, false);
+									}
+								}
+							}
+						}
+
+					}
+					break;
+			}
+		}
+	}
 
 	//Shows purple upon looting the chest, private storage, or bank
 	//If no purple, it wont do anything. If there is, it will un-hide it
@@ -171,7 +194,7 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 		/*
 		//Leave this for testing if modifications are needed.
 		if (chatMessage.getType() == ChatMessageType.OBJECT_EXAMINE) {
-			client.addChatMessage(ChatMessageType.FRIENDSCHATNOTIFICATION,"", "<col=ef20ff>Karambtwo - Twisted bow</col>", "");
+			//client.addChatMessage(ChatMessageType.FRIENDSCHATNOTIFICATION,"", "<col=ef20ff>Karambtwo - Twisted bow</col>", "");
 
 			//client.addChatMessage(ChatMessageType.FRIENDSCHATNOTIFICATION,"", "OtherAccount - Dragon claws", "");
 		}

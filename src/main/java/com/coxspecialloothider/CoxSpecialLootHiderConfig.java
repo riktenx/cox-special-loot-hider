@@ -18,4 +18,15 @@ public interface CoxSpecialLootHiderConfig extends Config
     {
         return false;
     }
+
+    @ConfigItem(
+            keyName = "colLog",
+            name = "Remove collection log pop up?",
+            description = "Remove collection log pop up?",
+            position = 2
+    )
+    default boolean colLog()
+    {
+        return true;
+    }
 }
