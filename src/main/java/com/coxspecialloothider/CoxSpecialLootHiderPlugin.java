@@ -5,12 +5,12 @@ import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
 import net.runelite.api.events.*;
+import net.runelite.api.gameval.InterfaceID;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import java.util.ArrayList;
-import net.runelite.api.widgets.WidgetID;
 
 @Slf4j
 @PluginDescriptor(
@@ -101,9 +101,9 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 	//If no purple, it wont do anything. If there is, it will un-hide it
 	@Subscribe
 	public void onWidgetLoaded(WidgetLoaded wid){
-		if(wid.getGroupId() == WidgetID.CHAMBERS_OF_XERIC_REWARD_GROUP_ID ||
-				wid.getGroupId() == WidgetID.CHAMBERS_OF_XERIC_STORAGE_UNIT_PRIVATE_GROUP_ID ||
-				wid.getGroupId() == WidgetID.BANK_GROUP_ID){
+		if(wid.getGroupId() == InterfaceID.RAIDS_REWARDS ||
+				wid.getGroupId() == InterfaceID.RAIDS_STORAGE_PRIVATE ||
+				wid.getGroupId() == InterfaceID.BANKMAIN){
 			//System.out.println("Hello, you are showing the loot");
 			showLoot();
 		}
