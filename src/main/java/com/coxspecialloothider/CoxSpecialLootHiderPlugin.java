@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
 import net.runelite.api.events.*;
 import net.runelite.api.gameval.InterfaceID;
+import net.runelite.api.widgets.Widget;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
@@ -27,6 +28,7 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 	private ArrayList<Tuple<MessageNode, String>> revealMessages = new ArrayList<>();
 	private ArrayList<Tuple<String, String>> listOfLoot = new ArrayList<>();
 	private boolean itemReceived = false;
+	private boolean collectionLogNotificationHidden = false;
 
 	private static final String[] listOfItems = {"Dexterous prayer scroll", "Arcane prayer scroll", "Twisted buckler",
 			"Dragon hunter crossbow", "Dinh's bulwark", "Ancestral hat", "Ancestral robe top", "Ancestral robe bottom",
@@ -41,6 +43,7 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 	@Override
 	protected void shutDown() throws Exception
 	{
+		closeCollectionLogNotification();
 		showLoot();
 	}
 
@@ -83,11 +86,9 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 
 						for (Tuple<String, String> loot : listOfLoot) {
 							if (notificationBottomText.contains(loot.getSecond())) {
-								for (WidgetNode node : client.getComponentTable()) {
-									if (node.getId() == 660) {
-										client.closeInterface(node, false);
-									}
-								}
+								collectionLogNotificationHidden = true;
+								hideCollectionLogNotification();
+								break;
 							}
 						}
 
@@ -95,6 +96,49 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 					break;
 			}
 		}
+	}
+
+	@Subscribe
+	public void onScriptPostFired(ScriptPostFired scriptPostFired)
+	{
+		if (!collectionLogNotificationHidden) {
+			return;
+		}
+
+		switch (scriptPostFired.getScriptId()) {
+			case ScriptID.NOTIFICATION_START:
+				// Keep the interface loaded for RuneLite's screenshot plugin, but hide it before the next frame.
+				hideCollectionLogNotification();
+				break;
+			case ScriptID.NOTIFICATION_DELAY:
+				// RuneLite queues collection log screenshots during NOTIFICATION_DELAY.
+				closeCollectionLogNotification();
+				break;
+		}
+	}
+
+	private void hideCollectionLogNotification()
+	{
+		Widget notification = client.getWidget(InterfaceID.NotificationDisplay.UNIVERSE);
+		if (notification != null) {
+			notification.setHidden(true);
+		}
+	}
+
+	private void closeCollectionLogNotification()
+	{
+		if (!collectionLogNotificationHidden) {
+			return;
+		}
+
+		for (WidgetNode node : client.getComponentTable()) {
+			if (node.getId() == InterfaceID.NOTIFICATION_DISPLAY) {
+				client.closeInterface(node, false);
+				break;
+			}
+		}
+
+		collectionLogNotificationHidden = false;
 	}
 
 	//Shows purple upon looting the chest, private storage, or bank
