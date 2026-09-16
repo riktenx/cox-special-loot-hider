@@ -1,7 +1,7 @@
 # CoX Censor
 
 Censors Chambers of Xeric unique names in chat until the reward chest is opened.
-If the loot is a new unique, it shows a delayed collection-log popup and saves a screenshot.
+On chest open, if the loot is a new unique, it shows a delayed collection-log popup and saves a screenshot.
 
 ## What it does
 
@@ -33,4 +33,4 @@ If you want to see the loot early, turn the plugin off.
 
 ## Credits
 
-Originally by Karambtwo. Maintained by Rikten X. Delayed collection-log popup and screenshot work by JJ.
+Originally by Karambtwo. Maintained by Rikten X. Delayed collection-log popup and screenshot work by Fraac.
