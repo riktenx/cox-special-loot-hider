@@ -1,47 +1,107 @@
 package com.coxspecialloothider;
 
 import com.google.inject.Provides;
+import java.time.Instant;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.List;
+import java.util.Locale;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import javax.inject.Inject;
+import javax.inject.Named;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.*;
-import net.runelite.api.events.*;
+import net.runelite.api.ChatMessageType;
+import net.runelite.api.Client;
+import net.runelite.api.GameState;
+import net.runelite.api.MessageNode;
+import net.runelite.api.ScriptID;
+import net.runelite.api.events.BeforeRender;
+import net.runelite.api.events.ChatMessage;
+import net.runelite.api.events.CommandExecuted;
+import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.ScriptCallbackEvent;
+import net.runelite.api.events.ScriptPostFired;
+import net.runelite.api.events.ScriptPreFired;
+import net.runelite.api.events.WidgetLoaded;
 import net.runelite.api.gameval.InterfaceID;
+import net.runelite.api.gameval.VarClientID;
+import net.runelite.api.widgets.Widget;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
-import java.util.ArrayList;
+import net.runelite.client.ui.overlay.OverlayManager;
+import net.runelite.client.util.Text;
 
 @Slf4j
 @PluginDescriptor(
-	name = "CoX Censor"
+	name = "CoX Censor",
+	description = "Hides CoX uniques until the reward chest is opened. New uniques get a collection-log popup and screenshot.",
+	tags = {"cox", "raids", "loot", "censor", "purple", "collection log"}
 )
 public class CoxSpecialLootHiderPlugin extends Plugin
 {
+	private static final String SPOOFED_NOTIFICATION_TITLE = " ";
+	private static final String CLOG_TEST_COMMAND = "clogtest";
+	private static final String CLOG_OPEN_COMMAND = "clogopen";
+	private static final int CHAT_VIEW_CLOSED = 1337;
+	private static final int CHAT_TAB_GAME = 1;
+	/** CS2 used by chat tabs (and the Toggle Chat plugin) to open or switch the chatbox. */
+	private static final int CHATBOX_TOGGLE_SCRIPT = 175;
+
 	@Inject
 	private Client client;
 
 	@Inject
+	private ClientThread clientThread;
+
+	@Inject
 	private CoxSpecialLootHiderConfig config;
 
-	private ArrayList<Tuple<MessageNode, String>> revealMessages = new ArrayList<>();
-	private ArrayList<Tuple<String, String>> listOfLoot = new ArrayList<>();
-	private boolean itemReceived = false;
+	@Inject
+	private OverlayManager overlayManager;
 
-	private static final String[] listOfItems = {"Dexterous prayer scroll", "Arcane prayer scroll", "Twisted buckler",
-			"Dragon hunter crossbow", "Dinh's bulwark", "Ancestral hat", "Ancestral robe top", "Ancestral robe bottom",
-			"Dragon claws", "Elder maul", "Kodai insignia", "Twisted bow"};
+	@Inject
+	private CollectionLogPopupOverlay popupOverlay;
+
+	@Inject
+	private ScreenshotHelper screenshotHelper;
+
+	@Inject
+	private ScheduledExecutorService executor;
+
+	@Inject
+	@Named("developerMode")
+	private boolean developerMode;
+
+	private final List<CensoredMessage> censoredMessages = new ArrayList<>();
+	private final List<CoxLootParser.LootBroadcast> trackedLoot = new ArrayList<>();
+	private final Deque<PendingUnlock> pendingUnlocks = new ArrayDeque<>();
+
+	private boolean itemReceived;
+	private boolean suppressingNativeNotification;
+	private String originalNotificationTitle;
+	private boolean titleSpoofed;
 
 	@Override
-	protected void startUp() throws Exception
+	protected void startUp()
 	{
+		popupOverlay.setPlugin(this);
+		overlayManager.add(popupOverlay);
 		client.refreshChat();
 	}
 
 	@Override
-	protected void shutDown() throws Exception
+	protected void shutDown()
 	{
-		showLoot();
+		revealLoot();
+		popupOverlay.reset();
+		overlayManager.remove(popupOverlay);
+		restoreNotificationTitle();
+		suppressingNativeNotification = false;
 	}
 
 	@Provides
@@ -50,69 +110,45 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 		return configManager.getConfig(CoxSpecialLootHiderConfig.class);
 	}
 
-	private void clearLists(){
-		revealMessages.clear();
-		listOfLoot.clear();
-		itemReceived = false;
-		client.refreshChat();
-	}
-
-	//Replaces censored messages with the originals
-	private void showLoot(){
-		for(Tuple<MessageNode, String> message : revealMessages){
-			//Gets the original message as string, sets the string at the referenced ChatMessage
-			//System.out.print("REVEAL MESSAGE BEING REPLACED: " + message.toString());
-			message.getFirst().setValue(message.getSecond());
-			message.getFirst().setRuneLiteFormatMessage(message.getSecond());
-		}
-		clearLists();
-		client.refreshChat();
-	}
-
-
-
-	@Subscribe
-	public void onScriptPreFired(ScriptPreFired scriptPreFired)
+	void onPopupFullyOpen(PendingUnlock unlock)
 	{
-		if(itemReceived && config.colLog()) {
-			switch (scriptPreFired.getScriptId()) {
-				case ScriptID.NOTIFICATION_START:
-					String notificationTopText = client.getVarcStrValue(VarClientStr.NOTIFICATION_TOP_TEXT);
-					String notificationBottomText = client.getVarcStrValue(VarClientStr.NOTIFICATION_BOTTOM_TEXT);
-					if (notificationTopText.equalsIgnoreCase("Collection log")) {
+		screenshotHelper.captureCollectionLog(unlock.getItem());
+	}
 
-						for (Tuple<String, String> loot : listOfLoot) {
-							if (notificationBottomText.contains(loot.getSecond())) {
-								for (WidgetNode node : client.getComponentTable()) {
-									if (node.getId() == 660) {
-										client.closeInterface(node, false);
-									}
-								}
-							}
-						}
+	void onPopupQueueFinished()
+	{
+		// Returned to idle after sequential popups complete.
+	}
 
-					}
-					break;
-			}
+	@Subscribe
+	public void onChatMessage(ChatMessage chatMessage)
+	{
+		if (!config.censorChat())
+		{
+			return;
+		}
+
+		switch (chatMessage.getType())
+		{
+			case FRIENDSCHATNOTIFICATION:
+				CoxLootParser.parseFriendsChatLoot(chatMessage.getMessage()).ifPresent(this::maybeTrackLoot);
+				break;
+			case CLAN_MESSAGE:
+			case CLAN_GUEST_MESSAGE:
+			case CLAN_GIM_MESSAGE:
+				CoxLootParser.parseClanLootBroadcast(chatMessage.getMessage()).ifPresent(this::maybeTrackLoot);
+				CoxLootParser.parseClanCollectionLog(chatMessage.getMessage()).ifPresent(this::maybeTrackLoot);
+				break;
+			default:
+				break;
 		}
 	}
 
-	//Shows purple upon looting the chest, private storage, or bank
-	//If no purple, it wont do anything. If there is, it will un-hide it
 	@Subscribe
-	public void onWidgetLoaded(WidgetLoaded wid){
-		if(wid.getGroupId() == InterfaceID.RAIDS_REWARDS ||
-				wid.getGroupId() == InterfaceID.RAIDS_STORAGE_PRIVATE ||
-				wid.getGroupId() == InterfaceID.BANKMAIN){
-			//System.out.println("Hello, you are showing the loot");
-			showLoot();
-		}
-	}
-
-
-	@Subscribe
-	public void onScriptCallbackEvent(ScriptCallbackEvent event) {
-		if (!"chatFilterCheck".equals(event.getEventName()) || !itemReceived) {
+	public void onScriptCallbackEvent(ScriptCallbackEvent event)
+	{
+		if (!"chatFilterCheck".equals(event.getEventName()) || !config.censorChat() || !itemReceived)
+		{
 			return;
 		}
 
@@ -126,146 +162,431 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 		String message = (String) objectStack[objectStackSize - 1];
 
 		ChatMessageType chatMessageType = ChatMessageType.of(messageType);
-		final MessageNode messageNode = client.getMessages().get(messageId);
-
-		if (chatMessageType == ChatMessageType.FRIENDSCHATNOTIFICATION){
-
-			//Iterating through the list of CoX uniques
-			for (String item : listOfItems){
-				//System.out.println("Message: " + message + ", item: " + item + ". Does message contain item?: ");
-				//System.out.println(message.contains(item));
-
-				//Check if CoX unique is in the message
-				if(message.contains(item)){
-					//System.out.println("CHAT CONTAINS AN ITEM. NEW LOOT RECEIVED: ");/
-					String censored = message.replace(item, "???");
-					revealMessages.add(new Tuple(messageNode, message));
-					//System.out.println(censored);
-					//System.out.println("Reveal message added: " + new Tuple(messageNode, message));
-					messageNode.setValue(censored);
-					messageNode.setRuneLiteFormatMessage(censored);
-					break;
-				}
-			}
+		MessageNode messageNode = client.getMessages().get(messageId);
+		if (messageNode == null || message == null)
+		{
+			return;
 		}
-		else if(itemReceived){
-			//If GAMEMESSAGE, check if it a collection log item and if it was received in the raid
-			if(chatMessageType == ChatMessageType.GAMEMESSAGE &&
-					(message.contains("New item added to your collection log:") ||
-							message.contains("Valuable drop:"))){
-				for (Tuple<String, String> loot : listOfLoot) {
-					if(message.contains(loot.getSecond())) {
-						revealMessages.add(new Tuple(messageNode, message));
-						intStack[intStackSize - 3] = 0;
-					}
-				}
+
+		if (chatMessageType == ChatMessageType.FRIENDSCHATNOTIFICATION)
+		{
+			// Track only from onChatMessage. Tracking here would re-censor after reveal+refreshChat.
+			String item = CoxLootParser.findUnique(message);
+			if (item != null && isTrackedItem(item))
+			{
+				rememberAndReplace(messageNode, message, CoxLootParser.censorUnique(message, item));
 			}
-			//If CLAN/GIM CLAN MESSAGE, either censor the loot if special raid message or remove
-			//Collection log broadcasts
-			else if((chatMessageType == ChatMessageType.CLAN_MESSAGE ||
-					chatMessageType == ChatMessageType.CLAN_GIM_MESSAGE)){
-				//See it it contains both the player and item that received loot
-				//System.out.println("CLAN BROADCAST TRIGGERED AFTER ITEM RECEIVED");
-				for (Tuple<String, String> loot : listOfLoot) {
-					//First is name, Second is item
-					if (message.contains(loot.getSecond()) && message.contains(loot.getFirst())) {
-						if(message.contains("received a new collection log item:")) {
-							revealMessages.add(new Tuple(messageNode, message));
-							intStack[intStackSize - 3] = 0;
-							break;
-						}
-						else{
-							String value = message.substring(0, message.indexOf(":")) + ": ???";
-							revealMessages.add(new Tuple(messageNode, message));
-							//System.out.println("SPECIAL LOOT FROM RAID MESSAGE AND REVEAL ADDED: " + message);
-							messageNode.setValue(value);
-							messageNode.setRuneLiteFormatMessage(value);
-						}
-					}
-				}
+			return;
+		}
+
+		if (chatMessageType == ChatMessageType.GAMEMESSAGE
+			&& (CoxLootParser.isCollectionLogGameMessage(message) || CoxLootParser.isValuableDropMessage(message)))
+		{
+			if (containsTrackedItem(message))
+			{
+				rememberOriginal(messageNode, message);
+				intStack[intStackSize - 3] = 0;
 			}
+			return;
+		}
+
+		if (chatMessageType == ChatMessageType.CLAN_MESSAGE
+			|| chatMessageType == ChatMessageType.CLAN_GUEST_MESSAGE
+			|| chatMessageType == ChatMessageType.CLAN_GIM_MESSAGE)
+		{
+			CoxLootParser.parseClanLootBroadcast(message).ifPresent(broadcast ->
+			{
+				if (isTrackedLoot(broadcast))
+				{
+					rememberAndReplace(messageNode, message, CoxLootParser.censorClanSpecialLoot(message));
+				}
+			});
+
+			CoxLootParser.parseClanCollectionLog(message).ifPresent(broadcast ->
+			{
+				if (isTrackedLoot(broadcast))
+				{
+					rememberOriginal(messageNode, message);
+					intStack[intStackSize - 3] = 0;
+				}
+			});
 		}
 	}
 
+	@Subscribe(priority = 1)
+	public void onScriptPreFired(ScriptPreFired event)
+	{
+		switch (event.getScriptId())
+		{
+			case ScriptID.NOTIFICATION_START:
+				maybeSuppressCollectionLogNotification();
+				break;
+			case ScriptID.NOTIFICATION_DELAY:
+				if (suppressingNativeNotification)
+				{
+					spoofNotificationTitle();
+				}
+				break;
+			default:
+				break;
+		}
+	}
 
 	@Subscribe
-	public void onChatMessage(ChatMessage chatMessage) {
-
-		/*
-		//Leave this for testing if modifications are needed.
-		if (chatMessage.getType() == ChatMessageType.OBJECT_EXAMINE) {
-			//client.addChatMessage(ChatMessageType.FRIENDSCHATNOTIFICATION,"", "<col=ef20ff>Karambtwo - Twisted bow</col>", "");
-
-			//client.addChatMessage(ChatMessageType.FRIENDSCHATNOTIFICATION,"", "OtherAccount - Dragon claws", "");
+	public void onScriptPostFired(ScriptPostFired event)
+	{
+		if (event.getScriptId() != ScriptID.NOTIFICATION_DELAY || !suppressingNativeNotification)
+		{
+			return;
 		}
-		if (chatMessage.getType() == ChatMessageType.ITEM_EXAMINE) {
 
+		restoreNotificationTitle();
+		suppressingNativeNotification = false;
+	}
 
-
-			client.addChatMessage(ChatMessageType.CLAN_MESSAGE,"", "Karambtwo received special loot from a raid: Twisted bow (1,680,988,483)", "Valiance");
-			client.addChatMessage(ChatMessageType.CLAN_MESSAGE,"", "Karambtwo received a new collection log item: Twisted bow (507/1,587)", "Valiance");
-			client.addChatMessage(ChatMessageType.GAMEMESSAGE,"", "New item added to your collection log: Twisted bow (507/1,587)", "");
-
-			//client.addChatMessage(ChatMessageType.CLAN_MESSAGE,"", "OtherAccount received special loot from a raid: Dragon claws (1,680,988,483)", "Valiance");
-			//client.addChatMessage(ChatMessageType.CLAN_MESSAGE,"", "OtherAccount received a new collection log item: Dragon claws (507/1,587)", "Valiance");
+	@Subscribe
+	public void onBeforeRender(BeforeRender event)
+	{
+		if (suppressingNativeNotification)
+		{
+			hideNativeNotificationPaintedWidgets();
 		}
-		if (chatMessage.getType() == ChatMessageType.NPC_EXAMINE) {
-			client.addChatMessage(ChatMessageType.CLAN_MESSAGE,"", "Karambtwo received special loot from a raid: Dragon claws (1,200,000)", "Valiance");
-			client.addChatMessage(ChatMessageType.CLAN_MESSAGE,"", "Karambtwo received a new collection log item: Dragon claws (507/1,587)", "Valiance");
+	}
 
-			//client.addChatMessage(ChatMessageType.CLAN_MESSAGE,"", "OtherAccount received special loot from a raid: Twisted bow (1,680,988,483)", "Valiance");
-			//client.addChatMessage(ChatMessageType.CLAN_MESSAGE,"", "OtherAccount received a new collection log item: Twisted bow (507/1,587)", "Valiance");
+	@Subscribe
+	public void onWidgetLoaded(WidgetLoaded event)
+	{
+		if (event.getGroupId() == InterfaceID.RAIDS_REWARDS)
+		{
+			onRewardChestOpened();
 		}
-		if (chatMessage.getType() == ChatMessageType.FRIENDSCHAT) {
-			client.addChatMessage(ChatMessageType.CLAN_MESSAGE,"", "Karambtwo received special loot from a raid: Tumeken's shadow (uncharged) (1,680,988,483)", "Valiance");
-			client.addChatMessage(ChatMessageType.CLAN_MESSAGE,"", "Karambtwo received a new collection log item: Tumeken's shadow (uncharged) (507/1,587)", "Valiance");
-			client.addChatMessage(ChatMessageType.GAMEMESSAGE,"", "New item added to your collection log: Tumeken's shadow (uncharged) (507/1,587)", "");
+	}
 
-			System.out.println(revealMessages);
+	@Subscribe
+	public void onGameStateChanged(GameStateChanged event)
+	{
+		GameState state = event.getGameState();
+		if (state == GameState.LOGIN_SCREEN || state == GameState.HOPPING || state == GameState.LOGGING_IN)
+		{
+			popupOverlay.reset();
+			pendingUnlocks.clear();
+			restoreNotificationTitle();
+			suppressingNativeNotification = false;
+			revealLoot();
+		}
+	}
 
-			//client.addChatMessage(ChatMessageType.CLAN_MESSAGE,"", "OtherAccount received special loot from a raid: Twisted bow (1,680,988,483)", "Valiance");
-			//client.addChatMessage(ChatMessageType.CLAN_MESSAGE,"", "OtherAccount received a new collection log item: Twisted bow (507/1,587)", "Valiance");
-		}*/
+	@Subscribe
+	public void onCommandExecuted(CommandExecuted event)
+	{
+		if (!developerMode)
+		{
+			return;
+		}
 
+		String command = event.getCommand().toLowerCase(Locale.ROOT);
+		if (CLOG_TEST_COMMAND.equals(command))
+		{
+			handleClogTest(event.getArguments());
+		}
+		else if (CLOG_OPEN_COMMAND.equals(command))
+		{
+			onRewardChestOpened();
+		}
+	}
 
-		//Check FC broadcasts to see if a raid was completed
-		//This sets the trigger for chat filtering and maintains list of loot
-		if (chatMessage.getType() == ChatMessageType.FRIENDSCHATNOTIFICATION){
-			//Iterating through the list of CoX uniques
-			for (String item : listOfItems){
-				//Check if CoX unique is in the message. Flip flag and add to loot received
-				if(chatMessage.getMessage().contains(item)){
-					if(config.soloOnly() && !chatMessage.getMessage().contains(client.getLocalPlayer().getName())){
-						return;
-					}
-					itemReceived = true;
-					String name = chatMessage.getMessage().substring(12, chatMessage.getMessage().indexOf("-") - 1);
-					listOfLoot.add(new Tuple(name, item));
-					break;
-				}
+	private void handleClogTest(String[] arguments)
+	{
+		String joined = String.join(" ", arguments).trim();
+		if (joined.isEmpty())
+		{
+			client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Usage: ::clogtest Twisted bow [--auto 5]", null);
+			return;
+		}
+
+		Integer autoSeconds = null;
+		String itemText = joined;
+		int autoIndex = joined.toLowerCase(Locale.ROOT).lastIndexOf("--auto");
+		if (autoIndex >= 0)
+		{
+			String after = joined.substring(autoIndex + "--auto".length()).trim();
+			itemText = joined.substring(0, autoIndex).trim();
+			try
+			{
+				autoSeconds = Integer.parseInt(after.split("\\s+")[0]);
+			}
+			catch (NumberFormatException ex)
+			{
+				client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Invalid --auto seconds. Usage: ::clogtest Twisted bow --auto 5", null);
+				return;
 			}
 		}
+
+		String item = CoxLootParser.findUnique(itemText);
+		if (item == null)
+		{
+			item = itemText;
+		}
+
+		String player = client.getLocalPlayer() != null ? Text.removeTags(client.getLocalPlayer().getName()) : "You";
+		itemReceived = true;
+		trackedLoot.add(new CoxLootParser.LootBroadcast(player, item));
+		pendingUnlocks.add(new PendingUnlock(player, item, Instant.now()));
+
+		client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
+			"Queued hidden collection-log popup for " + item + ". Use ::clogopen to simulate the chest.", null);
+
+		if (autoSeconds != null)
+		{
+			int delay = Math.max(0, autoSeconds);
+			client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
+				"Simulating chest open in " + delay + "s.", null);
+			executor.schedule(() -> clientThread.invoke(this::onRewardChestOpened), delay, TimeUnit.SECONDS);
+		}
 	}
-}
 
-class Tuple<T, U> {
-	T first;
-	U second;
-
-	public Tuple(T first, U second){
-		this.first = first;
-		this.second = second;
+	private void onRewardChestOpened()
+	{
+		revealLoot();
+		if (config.delayCollectionLogPopup() && !pendingUnlocks.isEmpty())
+		{
+			List<PendingUnlock> toShow = new ArrayList<>(pendingUnlocks);
+			pendingUnlocks.clear();
+			// runScript is not reentrant — CommandExecuted (and some widget loads) run inside CS2.
+			// Defer chat-tab switch + popup to the next client tick.
+			clientThread.invokeLater(() ->
+			{
+				openGameChatForPopup();
+				popupOverlay.enqueue(toShow);
+			});
+		}
+		else
+		{
+			pendingUnlocks.clear();
+		}
 	}
 
-	public T getFirst(){
-		return first;
+	private void openGameChatForPopup()
+	{
+		if (!config.openGameChatOnReveal())
+		{
+			return;
+		}
+
+		int view = client.getVarcIntValue(VarClientID.CHAT_VIEW);
+		if (view != CHAT_TAB_GAME)
+		{
+			// Closed chat is 1337; any other value is the current tab. Do not invoke this
+			// script when Game is already selected — that toggles the chatbox closed.
+			client.runScript(CHATBOX_TOGGLE_SCRIPT, 1, CHAT_TAB_GAME);
+			view = client.getVarcIntValue(VarClientID.CHAT_VIEW);
+		}
+
+		if (view != CHAT_TAB_GAME && view != CHAT_VIEW_CLOSED)
+		{
+			client.setVarcIntValue(VarClientID.CHAT_VIEW, CHAT_TAB_GAME);
+			client.runScript(ScriptID.BUILD_CHATBOX);
+		}
+
+		client.refreshChat();
 	}
 
-	public U getSecond(){
-		return second;
+	private void maybeSuppressCollectionLogNotification()
+	{
+		if (!itemReceived || !config.delayCollectionLogPopup())
+		{
+			return;
+		}
+
+		String topText = client.getVarcStrValue(VarClientID.NOTIFICATION_TITLE);
+		String bottomText = client.getVarcStrValue(VarClientID.NOTIFICATION_MAIN);
+		if (topText == null || !topText.equalsIgnoreCase("Collection log"))
+		{
+			return;
+		}
+
+		String item = CoxLootParser.collectionLogItemName(bottomText);
+		if (!isTrackedItem(item) && CoxLootParser.findUnique(bottomText) == null)
+		{
+			return;
+		}
+
+		String resolvedItem = isTrackedItem(item) ? item : CoxLootParser.findUnique(bottomText);
+		if (resolvedItem == null)
+		{
+			return;
+		}
+
+		suppressingNativeNotification = true;
+		hideNativeNotificationPaintedWidgets();
+
+		String player = client.getLocalPlayer() != null ? Text.removeTags(client.getLocalPlayer().getName()) : "";
+		pendingUnlocks.add(new PendingUnlock(player, resolvedItem, Instant.now()));
 	}
 
-	public String toString(){
-		return "(" + getFirst() + "," + getSecond() + ")";
+	private void hideNativeNotificationPaintedWidgets()
+	{
+		Widget content = client.getWidget(InterfaceID.NotificationDisplay.CONTENT);
+		if (content == null)
+		{
+			return;
+		}
+		hideWidgetTree(content, true);
+	}
+
+	private void hideWidgetTree(Widget widget, boolean skipSelf)
+	{
+		if (!skipSelf)
+		{
+			widget.setHidden(true);
+		}
+
+		hideChildren(widget.getStaticChildren());
+		hideChildren(widget.getDynamicChildren());
+		hideChildren(widget.getNestedChildren());
+	}
+
+	private void hideChildren(Widget[] children)
+	{
+		if (children == null)
+		{
+			return;
+		}
+		for (Widget child : children)
+		{
+			hideWidgetTree(child, false);
+		}
+	}
+
+	private void spoofNotificationTitle()
+	{
+		if (titleSpoofed)
+		{
+			return;
+		}
+		originalNotificationTitle = client.getVarcStrValue(VarClientID.NOTIFICATION_TITLE);
+		client.setVarcStrValue(VarClientID.NOTIFICATION_TITLE, SPOOFED_NOTIFICATION_TITLE);
+		titleSpoofed = true;
+	}
+
+	private void restoreNotificationTitle()
+	{
+		if (!titleSpoofed)
+		{
+			return;
+		}
+		if (originalNotificationTitle != null)
+		{
+			client.setVarcStrValue(VarClientID.NOTIFICATION_TITLE, originalNotificationTitle);
+		}
+		titleSpoofed = false;
+		originalNotificationTitle = null;
+	}
+
+	private void revealLoot()
+	{
+		for (CensoredMessage censored : censoredMessages)
+		{
+			censored.node.setValue(censored.original);
+			censored.node.setRuneLiteFormatMessage(censored.original);
+		}
+		clearCensorState();
+		client.refreshChat();
+	}
+
+	private void clearCensorState()
+	{
+		censoredMessages.clear();
+		trackedLoot.clear();
+		itemReceived = false;
+		client.refreshChat();
+	}
+
+	private void rememberAndReplace(MessageNode node, String original, String censored)
+	{
+		rememberOriginal(node, original);
+		node.setValue(censored);
+		node.setRuneLiteFormatMessage(censored);
+	}
+
+	private void rememberOriginal(MessageNode node, String original)
+	{
+		censoredMessages.add(new CensoredMessage(node, original));
+	}
+
+	private void maybeTrackLoot(CoxLootParser.LootBroadcast broadcast)
+	{
+		if (config.soloOnly() && !isLocalPlayer(broadcast.getPlayer()))
+		{
+			return;
+		}
+		if (isTrackedLoot(broadcast))
+		{
+			return;
+		}
+		itemReceived = true;
+		trackedLoot.add(broadcast);
+	}
+
+	private boolean isTrackedItem(String item)
+	{
+		if (item == null)
+		{
+			return false;
+		}
+		for (CoxLootParser.LootBroadcast loot : trackedLoot)
+		{
+			if (item.equalsIgnoreCase(loot.getItem()) || item.contains(loot.getItem()))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private boolean containsTrackedItem(String message)
+	{
+		String stripped = CoxLootParser.removeTags(message);
+		for (CoxLootParser.LootBroadcast loot : trackedLoot)
+		{
+			if (stripped.contains(loot.getItem()))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private boolean isTrackedLoot(CoxLootParser.LootBroadcast broadcast)
+	{
+		for (CoxLootParser.LootBroadcast loot : trackedLoot)
+		{
+			if (loot.getItem().equals(broadcast.getItem()) && loot.getPlayer().equalsIgnoreCase(broadcast.getPlayer()))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private boolean isLocalPlayer(String name)
+	{
+		if (client.getLocalPlayer() == null || client.getLocalPlayer().getName() == null)
+		{
+			return false;
+		}
+		return Text.removeTags(client.getLocalPlayer().getName()).equalsIgnoreCase(Text.removeTags(name));
+	}
+
+	private static final class CensoredMessage
+	{
+		private final MessageNode node;
+		private final String original;
+
+		private CensoredMessage(MessageNode node, String original)
+		{
+			this.node = node;
+			this.original = original;
+		}
 	}
 }

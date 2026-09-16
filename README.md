@@ -1,14 +1,36 @@
-# :warning: This plugin is in maintenance mode
+# CoX Censor
 
-This plugin was abandoned by the original author. It has been taken over to receive compatibility updates. **No new features will be added.**
+Censors Chambers of Xeric unique names in chat until the reward chest is opened.
+On chest open, if the loot is a new unique, it shows a delayed collection-log popup and saves a screenshot.
 
-I will grant collaborator/merge/update access at will to anyone who wishes to work on it, open an issue in the GitHub repository and/or reach out to me (Rikten X) in the RuneLite Discord.
+## What it does
 
-# Cox Censor
+1. Censors CoX unique names in friends chat and clan broadcasts (and matching collection-log / valuable-drop lines) until you open the reward chest.
+2. Hides the native collection-log popup for that unique so nobody sees the item name on-screen.
+3. When the CoX chest is opened:
+   - Restores the real chat messages
+   - Opens chat on the Game tab (so the screenshot shows the collection-log game message)
+   - Shows a custom collection-log popup
+   - Saves a screenshot that includes the popup
 
-When raiding with your friends, it is often more fun to hide the loot until
-the chest is opened, which forces all players in the raid to go to trade chat
-in order to hide the surprise. This relieves players of that inconvenience by
-censoring the item received as a drop, allowing everyone to keep the suspense
-while also knowing who got a drop. If you would like to see what the drop was, 
-simply turn off the plugin. This also works with multiple items in the same raid.
+Screenshots use RuneLite's normal location and naming:
+
+```text
+.runelite/screenshots/<character>/Collection Log/
+Collection log (Twisted bow) 2026-09-14_10-34-00.png
+```
+
+If you want to see the loot early, turn the plugin off.
+
+## Config options
+
+- **Censor raid loot in chat** — hide unique names until the chest opens
+- **Only censor your purples** — ignore other players' uniques
+- **Delay collection log popup until chest opens** — hide the native popup and replay it on chest open
+- **Take collection log screenshot** — capture the delayed popup
+- **Open Game chat on reveal** — switch chat to Game before the popup screenshot
+- **Dark collection log popup** — alternate popup style
+
+## Credits
+
+Originally by Karambtwo. Maintained by Rikten X. Delayed collection-log popup and screenshot work by Fraac.
