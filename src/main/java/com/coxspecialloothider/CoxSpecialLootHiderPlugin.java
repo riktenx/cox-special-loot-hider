@@ -147,7 +147,7 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 	@Subscribe
 	public void onScriptCallbackEvent(ScriptCallbackEvent event)
 	{
-		if (!"chatFilterCheck".equals(event.getEventName()) || !config.censorChat())
+		if (!"chatFilterCheck".equals(event.getEventName()) || !config.censorChat() || !itemReceived)
 		{
 			return;
 		}
@@ -170,7 +170,7 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 
 		if (chatMessageType == ChatMessageType.FRIENDSCHATNOTIFICATION)
 		{
-			CoxLootParser.parseFriendsChatLoot(message).ifPresent(this::maybeTrackLoot);
+			// Track only from onChatMessage. Tracking here would re-censor after reveal+refreshChat.
 			String item = CoxLootParser.findUnique(message);
 			if (item != null && isTrackedItem(item))
 			{
@@ -182,7 +182,7 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 		if (chatMessageType == ChatMessageType.GAMEMESSAGE
 			&& (CoxLootParser.isCollectionLogGameMessage(message) || CoxLootParser.isValuableDropMessage(message)))
 		{
-			if (itemReceived && containsTrackedItem(message))
+			if (containsTrackedItem(message))
 			{
 				rememberOriginal(messageNode, message);
 				intStack[intStackSize - 3] = 0;
@@ -196,7 +196,6 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 		{
 			CoxLootParser.parseClanLootBroadcast(message).ifPresent(broadcast ->
 			{
-				maybeTrackLoot(broadcast);
 				if (isTrackedLoot(broadcast))
 				{
 					rememberAndReplace(messageNode, message, CoxLootParser.censorClanSpecialLoot(message));
@@ -205,7 +204,6 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 
 			CoxLootParser.parseClanCollectionLog(message).ifPresent(broadcast ->
 			{
-				maybeTrackLoot(broadcast);
 				if (isTrackedLoot(broadcast))
 				{
 					rememberOriginal(messageNode, message);
