@@ -352,10 +352,15 @@ public class CoxSpecialLootHiderPlugin extends Plugin
 		revealLoot();
 		if (config.delayCollectionLogPopup() && !pendingUnlocks.isEmpty())
 		{
-			openGameChatForPopup();
 			List<PendingUnlock> toShow = new ArrayList<>(pendingUnlocks);
 			pendingUnlocks.clear();
-			popupOverlay.enqueue(toShow);
+			// runScript is not reentrant — CommandExecuted (and some widget loads) run inside CS2.
+			// Defer chat-tab switch + popup to the next client tick.
+			clientThread.invokeLater(() ->
+			{
+				openGameChatForPopup();
+				popupOverlay.enqueue(toShow);
+			});
 		}
 		else
 		{
